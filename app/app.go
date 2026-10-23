@@ -87,6 +87,7 @@ var (
 )
 
 func init() {
+	sdk.DefaultBondDenom = GetMicroPraxisDenom()
 	SetConfig()
 	var err error
 	DefaultNodeHome, err = helpers.GetNodeHomeDirectory(".praxisapp")

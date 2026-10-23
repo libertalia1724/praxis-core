@@ -28,6 +28,10 @@ func GetBech32ConsensusAddrPrefix() string {
 	return "praxisvalcons"
 }
 
+func GetMicroPraxisDenom() string {
+	return "upraxis"
+}
+
 func SetConfig() {
 	cfg := sdk.GetConfig()
 	cfg.SetBech32PrefixForAccount(GetBech32AccountAddrPrefix(), "praxispub")

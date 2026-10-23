@@ -3,7 +3,7 @@ set -euo pipefail
 
 NUM_NODES=4
 CHAIN_ID="praxis-localnet"
-STAKE_AMOUNT="1000000000stake"
+STAKE_AMOUNT="1000000000upraxis"
 LOCALNET_DIR="./build/localnet"
 DOCKER_IMAGE="praxis-node"
 
@@ -66,7 +66,7 @@ done
 
 echo "==> Creating gentx for node0..."
 docker run --rm -v "$PWD/$NODE0_DIR:/root/.praxisd" $DOCKER_IMAGE \
-    praxisd genesis gentx validator 100000000stake --chain-id "$CHAIN_ID" --keyring-backend test --home /root/.praxisd
+    praxisd genesis gentx validator 100000000upraxis --chain-id "$CHAIN_ID" --keyring-backend test --home /root/.praxisd
 
 echo "==> Collecting gentxs..."
 docker run --rm -v "$PWD/$NODE0_DIR:/root/.praxisd" $DOCKER_IMAGE \

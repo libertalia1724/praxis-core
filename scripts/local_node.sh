@@ -12,7 +12,7 @@ $PRAXISD_BIN config set app api.enable true
 $PRAXISD_BIN keys add alice
 $PRAXISD_BIN keys add bob
 $PRAXISD_BIN init test --chain-id demo
-$PRAXISD_BIN genesis add-genesis-account alice 5000000000stake --keyring-backend test
-$PRAXISD_BIN genesis add-genesis-account bob 5000000000stake --keyring-backend test
-$PRAXISD_BIN genesis gentx alice 1000000stake --chain-id demo
+$PRAXISD_BIN genesis add-genesis-account alice 5000000000upraxis --keyring-backend test
+$PRAXISD_BIN genesis add-genesis-account bob 5000000000upraxis --keyring-backend test
+$PRAXISD_BIN genesis gentx alice 1000000upraxis --chain-id demo
 $PRAXISD_BIN genesis collect-gentxs
