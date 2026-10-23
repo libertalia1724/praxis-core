@@ -87,6 +87,7 @@ var (
 )
 
 func init() {
+	SetConfig()
 	var err error
 	DefaultNodeHome, err = helpers.GetNodeHomeDirectory(".praxisapp")
 	if err != nil {
@@ -135,10 +136,10 @@ func NewPraxisApp(
 		ProtoFiles: proto.HybridResolver,
 		SigningOptions: signing.Options{
 			AddressCodec: address.Bech32Codec{
-				Bech32Prefix: sdk.GetConfig().GetBech32AccountAddrPrefix(),
+				Bech32Prefix: GetBech32AccountAddrPrefix(),
 			},
 			ValidatorAddressCodec: address.Bech32Codec{
-				Bech32Prefix: sdk.GetConfig().GetBech32ValidatorAddrPrefix(),
+				Bech32Prefix: GetBech32ValidatorAddrPrefix(),
 			},
 		},
 	})
@@ -196,8 +197,8 @@ func NewPraxisApp(
 		runtime.NewKVStoreService(keys[authtypes.StoreKey]),
 		authtypes.ProtoBaseAccount,
 		maccPerms,
-		authcodec.NewBech32Codec(sdk.Bech32MainPrefix),
-		sdk.Bech32MainPrefix,
+		authcodec.NewBech32Codec(GetBech32MainPrefix()),
+		GetBech32MainPrefix(),
 		authtypes.NewModuleAddress(govtypes.ModuleName).String(),
 		authkeeper.WithUnorderedTransactions(true),
 	)
@@ -217,8 +218,8 @@ func NewPraxisApp(
 		app.AccountKeeper,
 		app.BankKeeper,
 		authtypes.NewModuleAddress(govtypes.ModuleName).String(),
-		authcodec.NewBech32Codec(sdk.Bech32PrefixValAddr),
-		authcodec.NewBech32Codec(sdk.Bech32PrefixConsAddr),
+		authcodec.NewBech32Codec(GetBech32PrefixValAddr()),
+		authcodec.NewBech32Codec(GetBech32PrefixConsAddr()),
 	)
 	app.DistrKeeper = distrkeeper.NewKeeper(
 		appCodec,
@@ -403,9 +404,9 @@ func (app *PraxisApp) AutoCliOpts() autocli.AppOptions {
 	return autocli.AppOptions{
 		Modules:               modules,
 		ModuleOptions:         runtimeservices.ExtractAutoCLIOptions(app.ModuleManager.Modules),
-		AddressCodec:          authcodec.NewBech32Codec(sdk.GetConfig().GetBech32AccountAddrPrefix()),
-		ValidatorAddressCodec: authcodec.NewBech32Codec(sdk.GetConfig().GetBech32ValidatorAddrPrefix()),
-		ConsensusAddressCodec: authcodec.NewBech32Codec(sdk.GetConfig().GetBech32ConsensusAddrPrefix()),
+		AddressCodec:          authcodec.NewBech32Codec(GetBech32AccountAddrPrefix()),
+		ValidatorAddressCodec: authcodec.NewBech32Codec(GetBech32ValidatorAddrPrefix()),
+		ConsensusAddressCodec: authcodec.NewBech32Codec(GetBech32ConsensusAddrPrefix()),
 	}
 }
 
