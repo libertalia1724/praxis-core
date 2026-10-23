@@ -1,0 +1,50 @@
+name: Simulation
+
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Choice Test"
+        type: choice
+        default: all
+        options:
+          - all
+          - TestFullAppSimulation
+          - TestAppStateDeterminism
+      num_blocks:
+        description: "Num Blocks"
+        default: "500"
+      block_size:
+        description: "Block Size"
+        default: "200"
+      seed:
+        description: "Seed"
+        default: "42"
+
+jobs:
+  sims:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Run simulations
+        env:
+          TEST: ${{ inputs.test }}
+          NUM_BLOCKS: ${{ inputs.num_blocks }}
+          BLOCK_SIZE: ${{ inputs.block_size }}
+          SEED: ${{ inputs.seed }}
+        run: |
+          if [ "$TEST" = "all" ]; then
+            RUN="TestFullAppSimulation|TestAppStateDeterminism"
+          else
+            RUN="$TEST"
+          fi
+          go test -tags=sims ./app -run "^($RUN)$" \
+            -Enabled=true -NumBlocks="$NUM_BLOCKS" -BlockSize="$BLOCK_SIZE" \
+            -Commit=true -Seed="$SEED" -v -timeout 170m -p 1
