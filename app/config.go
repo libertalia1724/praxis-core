@@ -2,6 +2,8 @@ package app
 
 import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 )
 
 func GetBech32AccountAddrPrefix() string {
@@ -37,5 +39,7 @@ func SetConfig() {
 	cfg.SetBech32PrefixForAccount(GetBech32AccountAddrPrefix(), "praxispub")
 	cfg.SetBech32PrefixForValidator(GetBech32ValidatorAddrPrefix(), "praxisvaloperpub")
 	cfg.SetBech32PrefixForConsensusNode(GetBech32ConsensusAddrPrefix(), "praxisvalconspub")
+	// accept both 20 byte (account) and 32 byte (contract) addresses
+	cfg.SetAddressVerifier(wasmtypes.VerifyAddressLen())
 	cfg.Seal()
 }

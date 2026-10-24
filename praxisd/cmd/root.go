@@ -20,8 +20,17 @@ import (
 // NewRootCmd creates a new root command for praxisd. It is called once in the
 // main function.
 func NewRootCmd() *cobra.Command {
-	// we "pre"-instantiate the application for getting the injected/configured encoding configuration
-	tempApp := app.NewPraxisApp(log.NewNopLogger(), dbm.NewMemDB(), true, simtestutil.NewAppOptionsWithFlagHome(app.DefaultNodeHome))
+	// we "pre"-instantiate the application for getting the injected/configured encoding configuration.
+	//
+	// NOTE: the wasm keeper creates its vm cache directory under the app home, so a throwaway
+	// temp dir is used here (and removed afterwards) instead of the real node home. otherwise
+	// every cli invocation would create wasm directories in ~/.praxisapp
+	temp, err := os.MkdirTemp("", "praxisd")
+	if err != nil {
+		panic("failed to create temp dir: " + err.Error())
+	}
+	defer os.RemoveAll(temp)
+	tempApp := app.NewPraxisApp(log.NewNopLogger(), dbm.NewMemDB(), false, simtestutil.NewAppOptionsWithFlagHome(temp))
 	encodingConfig := app.EncodingConfig{
 		InterfaceRegistry: tempApp.InterfaceRegistry(),
 		Codec:             tempApp.AppCodec(),

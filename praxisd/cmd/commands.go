@@ -12,6 +12,10 @@ import (
 	"cosmossdk.io/log/v2"
 	confixcmd "cosmossdk.io/tools/confix/cmd"
 
+	"github.com/CosmWasm/wasmd/x/wasm"
+	wasmcli "github.com/CosmWasm/wasmd/x/wasm/client/cli"
+	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
+
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/debug"
 	"github.com/cosmos/cosmos-sdk/client/keys"
@@ -55,7 +59,8 @@ func initAppConfig() (string, interface{}) {
 	type CustomAppConfig struct {
 		serverconfig.Config `mapstructure:",squash"`
 
-		Custom CustomConfig `mapstructure:"custom"`
+		Wasm   wasmtypes.NodeConfig `mapstructure:"wasm"`
+		Custom CustomConfig         `mapstructure:"custom"`
 	}
 
 	// Optionally allow the chain developer to overwrite the SDK's default
@@ -79,15 +84,17 @@ func initAppConfig() (string, interface{}) {
 	// Now we set the custom config default values.
 	customAppConfig := CustomAppConfig{
 		Config: *srvCfg,
+		Wasm:   wasmtypes.DefaultNodeConfig(),
 		Custom: CustomConfig{
 			CustomField: "anything",
 		},
 	}
 
 	// The default SDK app template is defined in serverconfig.DefaultConfigTemplate.
-	// We append the custom config template to the default one.
-	// And we set the default config to the custom app template.
-	customAppTemplate := serverconfig.DefaultConfigTemplate + `
+	// we append the wasm and custom config templates to the default one
+	// and we set the default config to the custom app template
+	customAppTemplate := serverconfig.DefaultConfigTemplate +
+		wasmtypes.DefaultConfigTemplate() + `
 [custom]
 # That field will be parsed by server.InterceptConfigsPreRunHandler and held by viper.
 # Do not forget to add quotes around the value if it is a string.
@@ -114,8 +121,11 @@ func initRootCmd(
 
 	server.AddCommandsWithStartCmdOptions(rootCmd, app.DefaultNodeHome, newApp, appExport, server.StartCmdOptions{
 		AddFlags: func(startCmd *cobra.Command) {
+			wasm.AddModuleInitFlags(startCmd)
 		},
 	})
+	// also remove the wasm directory on `praxisd comet unsafe-reset-all`
+	wasmcli.ExtendUnsafeResetAllCmd(rootCmd)
 
 	// add keybase, auxiliary RPC, query, genesis, and tx child commands
 	rootCmd.AddCommand(

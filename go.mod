@@ -4,6 +4,7 @@ go 1.26.5
 
 replace (
 	cosmossdk.io/client/v2 => cosmossdk.io/client/v2 v2.0.0-beta.10.0.20260213183303-059defddaf30
+	github.com/CosmWasm/wasmd => github.com/libertalia1724/praxis-wasmd v0.70.5-praxis.1
 	github.com/tidwall/btree => github.com/cosmos/btree v0.0.0-20250924232609-2c6195d95951
 )
 
@@ -13,11 +14,13 @@ require (
 	cosmossdk.io/core v1.1.0
 	cosmossdk.io/log/v2 v2.1.0
 	cosmossdk.io/tools/confix v0.1.2
+	github.com/CosmWasm/wasmd v0.70.5
 	github.com/cometbft/cometbft v0.40.0
 	github.com/cosmos/cosmos-db v1.1.3
 	github.com/cosmos/cosmos-sdk v0.55.0
 	github.com/cosmos/cosmos-sdk/store/v2 v2.0.0
 	github.com/cosmos/gogoproto v1.7.2
+	github.com/spf13/cast v1.10.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 )
@@ -206,7 +209,6 @@ require (
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
-	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect

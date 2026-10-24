@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	autocliv1 "cosmossdk.io/api/cosmos/autocli/v1"
 	"cosmossdk.io/client/v2/autocli"
@@ -10,9 +11,11 @@ import (
 	"cosmossdk.io/core/appmodule"
 	"cosmossdk.io/log/v2"
 	abci "github.com/cometbft/cometbft/abci/types"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	db "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
+	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/grpc/cmtservice"
 	nodeservice "github.com/cosmos/cosmos-sdk/client/grpc/node"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -62,6 +65,11 @@ import (
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/cosmos/cosmos-sdk/x/tx/signing"
 	"github.com/cosmos/gogoproto/proto"
+	"github.com/spf13/cast"
+
+	"github.com/CosmWasm/wasmd/x/wasm"
+	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
+	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	// counter tutorial app wiring 1: add counter imports below
 )
 
@@ -83,6 +91,7 @@ var (
 		stakingtypes.NotBondedPoolName:      {authtypes.Burner, authtypes.Staking},
 		stakingtypes.KeyRotationFeePoolName: {authtypes.Burner},
 		govtypes.ModuleName:                 {authtypes.Burner},
+		wasmtypes.ModuleName:                {authtypes.Burner},
 	}
 )
 
@@ -113,6 +122,7 @@ type PraxisApp struct {
 	StakingKeeper         *stakingkeeper.Keeper
 	SlashingKeeper        slashingkeeper.Keeper
 	ConsensusParamsKeeper consensusparamkeeper.Keeper
+	WasmKeeper            wasmkeeper.Keeper
 	// counter tutorial app wiring 2: add the counter keeper field below
 
 	// the module manager
@@ -168,6 +178,7 @@ func NewPraxisApp(
 		slashingtypes.StoreKey,
 		govtypes.StoreKey,
 		consensusparamtypes.StoreKey,
+		wasmtypes.StoreKey,
 		// counter tutorial app wiring 3: add the counter store key below
 	)
 
@@ -276,6 +287,39 @@ func NewPraxisApp(
 		),
 	)
 
+	// wasm keeper
+	//
+	// NOTE: IBC is not enabled on this chain, so every IBC dependency of the wasm
+	// keeper (ICS4 wrapper, channel keepers, transfer port source) is nil. contracts
+	// can therefore not send IBC messages or run IBC queries. if IBC is added later,
+	// wire the real keepers in here and use wasmkeeper.BuiltInCapabilities() as is
+	homePath := cast.ToString(appOpts.Get(flags.FlagHome))
+	wasmDir := filepath.Join(homePath, "wasm")
+	nodeConfig, err := wasm.ReadNodeConfig(appOpts)
+	if err != nil {
+		panic(fmt.Sprintf("error while reading wasm config: %s", err))
+	}
+
+	app.WasmKeeper = wasmkeeper.NewKeeper(
+		appCodec,
+		runtime.NewKVStoreService(keys[wasmtypes.StoreKey]),
+		app.AccountKeeper,
+		app.BankKeeper,
+		app.StakingKeeper,
+		distrkeeper.NewQuerier(app.DistrKeeper),
+		nil, // ICS4Wrapper
+		nil, // ChannelKeeper
+		nil, // ChannelKeeperV2
+		nil, // ICS20TransferPortSource
+		app.MsgServiceRouter(),
+		app.GRPCQueryRouter(),
+		wasmDir,
+		nodeConfig,
+		wasmtypes.VMConfig{},
+		wasmCapabilities(),
+		authtypes.NewModuleAddress(govtypes.ModuleName).String(),
+	)
+
 	// counter tutorial app wiring 4: create the counter keeper below
 
 	app.ModuleManager = module.NewManager(
@@ -291,6 +335,7 @@ func NewPraxisApp(
 		distr.NewAppModule(appCodec, app.DistrKeeper, app.AccountKeeper, app.BankKeeper, app.StakingKeeper),
 		staking.NewAppModule(appCodec, app.StakingKeeper, app.AccountKeeper, app.BankKeeper),
 		vesting.NewAppModule(app.AccountKeeper, app.BankKeeper),
+		wasm.NewAppModule(appCodec, &app.WasmKeeper, app.StakingKeeper, app.AccountKeeper, app.BankKeeper, app.MsgServiceRouter()),
 		// counter tutorial app wiring 5: register the counter module below
 	)
 
@@ -347,6 +392,9 @@ func NewPraxisApp(
 		vestingtypes.ModuleName,
 		// counter tutorial app wiring 6: add the counter module to genesis order below
 		genutiltypes.ModuleName,
+		// wasm must come last: genesis messages can call into other modules
+		// (bank, auth, staking, ...), which must be initialized by then.
+		wasmtypes.ModuleName,
 	}
 
 	exportModuleOrder := []string{
@@ -360,13 +408,14 @@ func NewPraxisApp(
 		vestingtypes.ModuleName,
 		// counter tutorial app wiring 7: add the counter module to export order below
 		genutiltypes.ModuleName,
+		wasmtypes.ModuleName,
 	}
 
 	app.ModuleManager.SetOrderInitGenesis(genesisModuleOrder...)
 	app.ModuleManager.SetOrderExportGenesis(exportModuleOrder...)
 
 	app.configurator = module.NewConfigurator(app.appCodec, app.MsgServiceRouter(), app.GRPCQueryRouter())
-	err := app.ModuleManager.RegisterServices(app.configurator)
+	err = app.ModuleManager.RegisterServices(app.configurator)
 	if err != nil {
 		panic(err)
 	}
@@ -379,11 +428,27 @@ func NewPraxisApp(
 	app.SetPreBlocker(app.PreBlocker())
 	app.SetBeginBlocker(app.BeginBlocker)
 	app.SetEndBlocker(app.EndBlocker)
-	app.setAnteHandler(txConfig)
+	app.setAnteHandler(txConfig, nodeConfig, keys[wasmtypes.StoreKey])
+
+	// must be before loading the version: the snapshot extension needs to be
+	// registered before the store is loaded/restored.
+	if manager := app.SnapshotManager(); manager != nil {
+		if err := manager.RegisterExtensions(
+			wasmkeeper.NewWasmSnapshotter(app.CommitMultiStore(), &app.WasmKeeper),
+		); err != nil {
+			panic(fmt.Errorf("failed to register snapshot extension: %w", err))
+		}
+	}
 
 	if loadLatest {
 		if err := app.LoadLatestVersion(); err != nil {
 			panic(fmt.Errorf("error loading last version: %w", err))
+		}
+
+		// pinned codes are not persisted in wasmvm, so they must be reinitialized on start
+		ctx := app.NewContextLegacy(true, cmtproto.Header{})
+		if err := app.WasmKeeper.InitializePinnedCodes(ctx); err != nil {
+			panic(fmt.Errorf("failed to initialize pinned codes: %w", err))
 		}
 	}
 
@@ -411,18 +476,23 @@ func (app *PraxisApp) AutoCliOpts() autocli.AppOptions {
 	}
 }
 
-func (app *PraxisApp) setAnteHandler(txConfig client.TxConfig) {
-	anteHandler, err := ante.NewAnteHandler(
-		ante.HandlerOptions{
-			AccountKeeper:   app.AccountKeeper,
-			BankKeeper:      app.BankKeeper,
-			SignModeHandler: txConfig.SignModeHandler(),
-			SigGasConsumer:  ante.DefaultSigVerificationGasConsumer,
-			SigVerifyOptions: []ante.SigVerificationDecoratorOption{
-				// change below as needed.
-				ante.WithUnorderedTxGasCost(ante.DefaultUnorderedTxGasCost),
-				ante.WithMaxUnorderedTxTimeoutDuration(ante.DefaultMaxTimeoutDuration),
+func (app *PraxisApp) setAnteHandler(txConfig client.TxConfig, nodeConfig wasmtypes.NodeConfig, txCounterStoreKey *storetypes.KVStoreKey) {
+	anteHandler, err := NewAnteHandler(
+		HandlerOptions{
+			HandlerOptions: ante.HandlerOptions{
+				AccountKeeper:   app.AccountKeeper,
+				BankKeeper:      app.BankKeeper,
+				SignModeHandler: txConfig.SignModeHandler(),
+				SigGasConsumer:  ante.DefaultSigVerificationGasConsumer,
+				SigVerifyOptions: []ante.SigVerificationDecoratorOption{
+					// change below as needed
+					ante.WithUnorderedTxGasCost(ante.DefaultUnorderedTxGasCost),
+					ante.WithMaxUnorderedTxTimeoutDuration(ante.DefaultMaxTimeoutDuration),
+				},
 			},
+			NodeConfig:            &nodeConfig,
+			WasmKeeper:            &app.WasmKeeper,
+			TXCounterStoreService: runtime.NewKVStoreService(txCounterStoreKey),
 		},
 	)
 	if err != nil {
@@ -431,6 +501,21 @@ func (app *PraxisApp) setAnteHandler(txConfig client.TxConfig) {
 
 	// Set the AnteHandler for the app
 	app.SetAnteHandler(anteHandler)
+}
+
+// wasmCapabilities returns the cosmwasm capabilities supported by this chain
+//
+// IBC is not enabled, so the "ibc2" capability is left out: contracts that
+// require it are rejected at upload time instead of failing at runtime
+func wasmCapabilities() []string {
+	caps := make([]string, 0, len(wasmkeeper.BuiltInCapabilities()))
+	for _, c := range wasmkeeper.BuiltInCapabilities() {
+		if c == "ibc2" {
+			continue
+		}
+		caps = append(caps, c)
+	}
+	return caps
 }
 
 // RegisterAPIRoutes registers all application module routes with the provided
